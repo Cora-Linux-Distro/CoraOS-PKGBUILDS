@@ -17,7 +17,7 @@ depends=(
 backup=('etc/zsh/zshrc')
 source=(".zshrc"
         ".p10k.zsh")
-sha256sums=('6d7cb54b3d88adbfdb48d301958bda2b35864de9e2dd9350f9e92529333d2376'
+sha256sums=('c9af2dc53b99ec423ecad147a3c096efa1bbec55295aa28f82e5c9813d70e5e3'
             '9eb64ee8469657d7241304da31b3fdeddfdda3f63314fe868b97b1ce5151aca7')
 
 package() {
