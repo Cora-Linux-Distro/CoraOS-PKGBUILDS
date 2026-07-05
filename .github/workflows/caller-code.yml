@@ -1,0 +1,20 @@
+name: Build and publish code
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'code/PKGBUILD'
+  workflow_dispatch:
+
+jobs:
+  build:
+    uses: ./.github/workflows/build-simple.yml
+    with:
+      pkgdir: code
+      keep_versions: 2
+      sign_package: true
+      skip_checksums: false
+      build_retries: 3
+      dry_run: ${{ github.event_name == 'pull_request' }}
+    secrets: inherit
