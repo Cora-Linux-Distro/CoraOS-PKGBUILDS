@@ -1,6 +1,6 @@
 # Maintainer: CoraOS <support@coraos.org>
 pkgname=code
-pkgver=1.101.1
+pkgver=1.127.0
 pkgrel=1
 pkgdesc="Visual Studio Code - Code editing redefined"
 arch=('x86_64')
