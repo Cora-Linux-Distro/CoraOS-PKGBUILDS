@@ -1,7 +1,7 @@
 # Maintainer: CoraOS <support@coraos.org>
 pkgname=coraos-zsh-config
 pkgver=1.0.2
-pkgrel=1
+pkgrel=2
 pkgdesc="CoraOS default Zsh configuration (system-wide, managed)"
 arch=('any')
 url="https://github.com/CoraOS/CoraOS-PKGBUILDS"
