@@ -4,12 +4,12 @@ on:
   push:
     branches: [main]
     paths:
-      - 'code/PKGBUILD'
+      - "code/PKGBUILD"
   workflow_dispatch:
 
 jobs:
   build:
-    uses: ./.github/workflows/build-simple.yml
+    uses: ./.github/workflows/builder-workflow.yaml
     with:
       pkgdir: code
       keep_versions: 2
