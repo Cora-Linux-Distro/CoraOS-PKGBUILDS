@@ -55,15 +55,20 @@ bindkey '^[[A' history-substring-search-up
 bindkey '^[[B' history-substring-search-down
 
 [[ -r /usr/share/zsh-theme-powerlevel10k/powerlevel10k.zsh-theme ]] && source /usr/share/zsh-theme-powerlevel10k/powerlevel10k.zsh-theme
-[[ -f ~/.p10k.zsh ]] && source ~/.p10k.zsh
+if [[ -f ~/.p10k.zsh ]]; then
+    source ~/.p10k.zsh
+elif [[ -f /usr/share/coraos/zsh/coraos.p10k.zsh ]]; then
+    source /usr/share/coraos/zsh/coraos.p10k.zsh
+fi
 
-source ~/.zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh
-source ~/.zsh/plugins/history-substring-search/zsh-history-substring-search.zsh
+source /usr/share/coraos/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh
+source /usr/share/coraos/zsh/plugins/history-substring-search/zsh-history-substring-search.zsh
+source /usr/share/coraos/zsh/plugins/fast-syntax-highlighting/fast-syntax-highlighting.plugin.zsh
 
 bindkey '^[[A' history-substring-search-up
 bindkey '^[[B' history-substring-search-down
 
-source ~/.zsh/plugins/fast-syntax-highlighting/fast-syntax-highlighting.plugin.zsh
+
 
 eval "$(zoxide init zsh)"
 eval "$(fzf --zsh)"

@@ -1,0 +1,367 @@
+name: Build and publish CoraOS package
+
+on:
+  workflow_call:
+    inputs:
+      pkgdir:
+        description: "Path to PKGBUILD directory, relative to repo root"
+        required: false
+        default: "."
+        type: string
+      keep_versions:
+        description: "Newest N versions to retain per package name in the repo"
+        required: false
+        default: 3
+        type: number
+      sign_package:
+        description: "GPG-sign the .pkg.tar.zst with the builder key"
+        required: false
+        default: true
+        type: boolean
+      skip_checksums:
+        description: "Pass --skipchecksums to makepkg (use sparingly)"
+        required: false
+        default: false
+        type: boolean
+      build_retries:
+        description: "How many times to retry a failed build"
+        required: false
+        default: 3
+        type: number
+      dry_run:
+        description: "Build but do not publish to R2 (for testing)"
+        required: false
+        default: false
+        type: boolean
+    secrets:
+      GPG_PRIVATE_KEY:
+        required: true
+      REPO_ACCESS_KEY:
+        required: true
+      REPO_SECRET_ACCESS_KEY:
+        required: true
+      ACCOUNT_ID:
+        required: true
+
+concurrency:
+  group: coraos-repo-publish
+  cancel-in-progress: false
+
+jobs:
+  build-and-publish:
+    name: Build and publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container:
+      image: archlinux:latest
+      options: --security-opt seccomp=unconfined
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Phase 0 — free disk space
+        run: |
+          rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost \
+                 /usr/local/lib/android /usr/share/doc /usr/share/man 2>/dev/null || true
+          df -h /
+
+      - name: Phase 0 — install deps
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --needed --noconfirm \
+            base-devel git sudo pacman-contrib gnupg archlinux-keyring \
+            libarchive rclone namcap
+
+      - name: Phase 0 — setup keyring
+        run: |
+          rm -rf /etc/pacman.d/gnupg
+          pacman-key --init
+          pacman-key --populate archlinux
+
+      - name: Phase 0 — add builder user
+        run: |
+          useradd -m builder
+          echo "builder ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/builder
+          chmod 440 /etc/sudoers.d/builder
+
+      - name: Phase 0 — resolve package metadata
+        id: meta
+        shell: bash
+        run: |
+          (
+            cd "${{ inputs.pkgdir }}"
+            # shellcheck disable=SC1091
+            source ./PKGBUILD
+            pkgnames=("${pkgname[@]}")
+            echo "pkgnames_str=${pkgnames[*]}" >> "$GITHUB_OUTPUT"
+            echo "pkgver=$pkgver" >> "$GITHUB_OUTPUT"
+            echo "pkgrel=$pkgrel" >> "$GITHUB_OUTPUT"
+            echo "## Package: ${pkgnames[*]}" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "- **Version**: \`$pkgver-$pkgrel\`" >> "$GITHUB_STEP_SUMMARY"
+            echo "- **Variants**: ${#pkgnames[@]}" >> "$GITHUB_STEP_SUMMARY"
+            echo "- **Keep versions**: ${{ inputs.keep_versions }}" >> "$GITHUB_STEP_SUMMARY"
+            echo "- **Sign**: ${{ inputs.sign_package }}" >> "$GITHUB_STEP_SUMMARY"
+            echo "- **Dry run**: ${{ inputs.dry_run }}" >> "$GITHUB_STEP_SUMMARY"
+          )
+
+      - name: Phase 1 — import builder GPG key
+        env:
+          GPG_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        shell: su builder -s /bin/bash {0}
+        run: |
+          mkdir -p ~/.gnupg && chmod 700 ~/.gnupg
+          echo -e "allow-loopback-pinentry\nbatch" > ~/.gnupg/gpg-agent.conf
+          echo "auto-key-retrieve" >> ~/.gnupg/gpg.conf
+          echo "keyserver hkps://keyserver.ubuntu.com" >> ~/.gnupg/gpg.conf
+          gpgconf --kill gpg-agent || true
+
+          echo "$GPG_KEY" | gpg --batch --import
+          FINGERPRINT=$(gpg --list-keys --with-colons | grep '^fpr' | head -1 | cut -d: -f10)
+          if [ -z "$FINGERPRINT" ]; then
+            echo "::error::GPG key import failed — no fingerprint found"
+            exit 1
+          fi
+          echo "::notice::Builder key fingerprint: $FINGERPRINT"
+          echo "${FINGERPRINT}:6:" | gpg --import-ownertrust
+
+          sudo sed -i "s|^#*GPGKEY=.*|GPGKEY=\"$FINGERPRINT\"|" /etc/makepkg.conf
+
+      - name: Phase 1 — prepare source tree
+        run: chown -R builder:builder "${{ inputs.pkgdir }}"
+
+      - name: Phase 1 — build package
+        env:
+          SIGN: ${{ inputs.sign_package }}
+          SKIP_CHECKSUMS: ${{ inputs.skip_checksums }}
+          BUILD_RETRIES: ${{ inputs.build_retries }}
+        shell: su builder -s /bin/bash {0}
+        working-directory: ${{ inputs.pkgdir }}
+        run: |
+          MAKEPKG_ARGS=(-s --noconfirm)
+          [ "$SKIP_CHECKSUMS" = "true" ] && MAKEPKG_ARGS+=(--skipchecksums)
+          [ "$SIGN" = "true" ] && MAKEPKG_ARGS+=(--sign)
+
+          for attempt in $(seq 1 "$BUILD_RETRIES"); do
+            echo "::group::Build attempt $attempt/$BUILD_RETRIES"
+            if MAKEFLAGS="-j$(nproc)" makepkg "${MAKEPKG_ARGS[@]}"; then
+              echo "::endgroup::"
+              echo "::notice::Build succeeded on attempt $attempt"
+              break
+            fi
+            echo "::endgroup::"
+            if [ "$attempt" -eq "$BUILD_RETRIES" ]; then
+              echo "::error::Build failed after $BUILD_RETRIES attempts"
+              exit 1
+            fi
+            echo "Build failed, retrying in 15s..."
+            sleep 15
+          done
+
+      - name: Phase 1 — verify package artifacts
+        env:
+          SIGN: ${{ inputs.sign_package }}
+        shell: su builder -s /bin/bash {0}
+        working-directory: ${{ inputs.pkgdir }}
+        run: |
+          shopt -s nullglob
+          found=0
+          for f in *.pkg.tar.zst; do
+            found=1
+            echo "Built: $f"
+            if [ "$SIGN" = "true" ] && [ ! -f "${f}.sig" ]; then
+              echo "::error::Signature missing for $f"
+              exit 1
+            fi
+          done
+          [ "$found" -eq 1 ] || { echo "::error::No .pkg.tar.zst produced"; exit 1; }
+
+      - name: Phase 1 — namcap lint (informational)
+        continue-on-error: true
+        shell: su builder -s /bin/bash {0}
+        working-directory: ${{ inputs.pkgdir }}
+        run: |
+          shopt -s nullglob
+          for f in *.pkg.tar.zst; do
+            echo "::group::namcap $f"
+            namcap "$f" || true
+            echo "::endgroup::"
+          done
+
+      - name: Phase 1 — upload build artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output-${{ github.run_id }}
+          path: ${{ inputs.pkgdir }}/*.pkg.tar.zst*
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Phase 2 — dry-run checkpoint
+        if: ${{ inputs.dry_run }}
+        run: |
+          echo "::notice::Dry run — skipping publish"
+          echo "## Dry run complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Package was built and verified, but not published to R2." >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+
+      - name: Phase 2 — sync current repo from R2
+        env:
+          REPO_KEY: ${{ secrets.REPO_ACCESS_KEY }}
+          REPO_SECRET: ${{ secrets.REPO_SECRET_ACCESS_KEY }}
+          ACCOUNT: ${{ secrets.ACCOUNT_ID }}
+        run: |
+          rclone config create coraosrepo s3 \
+            provider=Cloudflare \
+            access_key_id="$REPO_KEY" \
+            secret_access_key="$REPO_SECRET" \
+            endpoint="https://$ACCOUNT.r2.cloudflarestorage.com" \
+            no_check_bucket=true
+
+          mkdir -p CoraOS_Repo
+          rclone copy coraosrepo:coraos-repo/x86_64/ CoraOS_Repo/ \
+            --verbose --retries 5 --retries-sleep 10s \
+            --transfers 16 --checkers 8
+
+      - name: Phase 2 — stage new packages and prune old versions
+        env:
+          KEEP: ${{ inputs.keep_versions }}
+          PKGDIR: ${{ inputs.pkgdir }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cp "$PKGDIR"/*.pkg.tar.zst* CoraOS_Repo/ || {
+            echo "::error::No package artifacts to publish"
+            exit 1
+          }
+
+          cd CoraOS_Repo
+
+          # shellcheck disable=SC1090
+          source "$GITHUB_WORKSPACE/$PKGDIR/PKGBUILD"
+
+          added=""
+          pruned=""
+
+          for pkg in "${pkgname[@]}"; do
+            echo "::group::Prune $pkg → keep newest $KEEP"
+
+            shopt -s nullglob
+            mapfile -t candidates < <(ls ${pkg}-*.pkg.tar.zst 2>/dev/null)
+
+            if [ "${#candidates[@]}" -le "$KEEP" ]; then
+              echo "Only ${#candidates[@]} version(s) present, nothing to prune"
+              for c in "${candidates[@]}"; do
+                verpart="${c#${pkg}-}"
+                verpart="${verpart%.pkg.tar.zst}"
+                added="${added}${pkg} ${verpart}\n"
+              done
+              echo "::endgroup::"
+              continue
+            fi
+
+            # Sort by version (newest first) using sort -V
+            mapfile -t sorted < <(
+              printf '%s\n' "${candidates[@]}" | while IFS= read -r f; do
+                verpart="${f#${pkg}-}"
+                verpart="${verpart%.pkg.tar.zst}"
+                verpart="${verpart%-*}"
+                printf '%s\t%s\n' "$verpart" "$f"
+              done | sort -t$'\t' -k1,1 -V -r | cut -f2-
+            )
+
+            i=0
+            for f in "${sorted[@]}"; do
+              i=$((i+1))
+              verpart="${f#${pkg}-}"
+              verpart="${verpart%.pkg.tar.zst}"
+              if [ "$i" -le "$KEEP" ]; then
+                added="${added}${pkg} ${verpart}\n"
+                echo "KEEP: $f"
+              else
+                pruned="${pruned}${pkg} ${verpart}\n"
+                echo "PRUNE: $f"
+                rm -f "$f" "${f}.sig"
+              fi
+            done
+            echo "::endgroup::"
+          done
+
+          shopt -s nullglob
+          for sig in *.pkg.tar.zst.sig; do
+            [ -f "${sig%.sig}" ] || { echo "Orphan sig: $sig"; rm -f "$sig"; }
+          done
+
+          {
+            echo "ADDED<<EOF"
+            printf "$added"
+            echo "EOF"
+            echo "PRUNED<<EOF"
+            printf "$pruned"
+            echo "EOF"
+          } >> "$GITHUB_ENV"
+
+      - name: Phase 3 — rebuild repo database (atomic swap)
+        run: |
+          set -euo pipefail
+          cd CoraOS_Repo
+
+          tmp_db="coraos.db.tar.gz.new"
+          tmp_files="coraos.files.tar.gz.new"
+
+          rm -f "$tmp_db" "$tmp_files"
+          shopt -s nullglob
+          repo-add "$tmp_db" *.pkg.tar.zst
+
+          if [ -f "$tmp_db" ]; then
+            mv -f "$tmp_db" coraos.db.tar.gz
+            ln -sf coraos.db.tar.gz coraos.db
+          fi
+
+          if [ -f coraos.files.tar.gz.new ]; then
+            mv -f coraos.files.tar.gz.new coraos.files.tar.gz
+            ln -sf coraos.files.tar.gz coraos.files
+          fi
+
+          echo "::group::Final repo contents"
+          ls -la
+          echo "::endgroup::"
+
+      - name: Phase 4 — sync back to R2
+        env:
+          REPO_KEY: ${{ secrets.REPO_ACCESS_KEY }}
+          REPO_SECRET: ${{ secrets.REPO_SECRET_ACCESS_KEY }}
+          ACCOUNT: ${{ secrets.ACCOUNT_ID }}
+        run: |
+          rclone sync CoraOS_Repo/ coraosrepo:coraos-repo/x86_64/ \
+            --verbose --retries 5 --retries-sleep 10s \
+            --checksum --copy-links \
+            --transfers 16 --checkers 8 \
+            --low-level-retries 20
+
+      - name: Phase 5 — publish summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Publish result"
+            echo ""
+            echo "### Added / kept"
+            echo '```'
+            printf '%b' "${ADDED:-none}"
+            echo '```'
+            echo ""
+            echo "### Pruned"
+            echo '```'
+            printf '%b' "${PRUNED:-none}"
+            echo '```'
+            echo ""
+            echo "### Status"
+            if [ "${{ job.status }}" = "success" ]; then
+              echo "Published to \`coraosrepo:coraos-repo/x86_64/\`"
+            else
+              echo "Job did not complete successfully"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
