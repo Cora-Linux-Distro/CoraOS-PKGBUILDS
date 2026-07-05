@@ -34,7 +34,7 @@ jobs:
           set -euo pipefail
 
           LATEST=$(curl -fsSL https://update.code.visualstudio.com/api/releases/stable | jq -r '.[0]')
-          CURRENT=$(grep '^pkgver=' packages/code/PKGBUILD | cut -d= -f2)
+          CURRENT=$(grep '^pkgver=' code/PKGBUILD | cut -d= -f2)
 
           echo "Latest:  $LATEST"
           echo "Current: $CURRENT"
