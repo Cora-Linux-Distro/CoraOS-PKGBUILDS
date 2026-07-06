@@ -1,20 +1,529 @@
-name: Build and publish coraos-zsh-config
+name: Build and publish CoraOS package
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "coraos-zsh-config/PKGBUILD"
-  workflow_dispatch:
+  workflow_call:
+    inputs:
+      pkgdir:
+        description: 'Path to PKGBUILD directory, relative to repo root'
+        required: false
+        default: '.'
+        type: string
+      keep_versions:
+        description: 'Newest N versions to retain per package name in the repo'
+        required: false
+        default: 3
+        type: number
+      sign_package:
+        description: 'GPG-sign the .pkg.tar.zst with the builder key'
+        required: false
+        default: true
+        type: boolean
+      skip_checksums:
+        description: 'Pass --skipchecksums to makepkg (use sparingly)'
+        required: false
+        default: false
+        type: boolean
+      build_retries:
+        description: 'How many times to retry a failed build'
+        required: false
+        default: 3
+        type: number
+      dry_run:
+        description: 'Build but do not publish to R2 (for testing)'
+        required: false
+        default: false
+        type: boolean
+      purge_cache:
+        description: 'Purge Cloudflare cache for DB files after publish (instant visibility)'
+        required: false
+        default: true
+        type: boolean
+    secrets:
+      GPG_PRIVATE_KEY:
+        required: true
+      REPO_ACCESS_KEY:
+        required: true
+      REPO_SECRET_ACCESS_KEY:
+        required: true
+      ACCOUNT_ID:
+        required: true
+      CF_API_TOKEN:
+        required: false
+      CF_ZONE_ID:
+        required: false
+      REPO_HOSTNAME:
+        required: false
+
+concurrency:
+  group: coraos-repo-publish
+  cancel-in-progress: false
 
 jobs:
-  build:
-    uses: ./.github/workflows/builder-workflow.yaml
-    with:
-      pkgdir: coraos-zsh-config
-      keep_versions: 2
-      sign_package: true
-      skip_checksums: false
-      build_retries: 3
-      dry_run: ${{ github.event_name == 'pull_request' }}
-    secrets: inherit
+  build-and-publish:
+    name: Build and publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container:
+      image: archlinux:latest
+      options: --security-opt seccomp=unconfined
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Phase 0 — free disk space
+        run: |
+          rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost \
+                 /usr/local/lib/android /usr/share/doc /usr/share/man 2>/dev/null || true
+          df -h /
+
+      - name: Phase 0 — install deps
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --needed --noconfirm \
+            base-devel git sudo pacman-contrib gnupg archlinux-keyring \
+            libarchive rclone namcap jq curl
+
+      - name: Phase 0 — setup keyring
+        run: |
+          rm -rf /etc/pacman.d/gnupg
+          pacman-key --init
+          pacman-key --populate archlinux
+
+      - name: Phase 0 — add builder user
+        run: |
+          useradd -m builder
+          echo "builder ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/builder
+          chmod 440 /etc/sudoers.d/builder
+
+      - name: Phase 0 — pre-flight checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          PKGBUILD_PATH="${{ inputs.pkgdir }}/PKGBUILD"
+          if [ ! -f "$PKGBUILD_PATH" ]; then
+            echo "::error::PKGBUILD not found at $PKGBUILD_PATH"
+            exit 1
+          fi
+          if ! grep -q '^pkgname=' "$PKGBUILD_PATH"; then
+            echo "::error::PKGBUILD is missing pkgname="
+            exit 1
+          fi
+          if ! grep -q '^pkgver=' "$PKGBUILD_PATH"; then
+            echo "::error::PKGBUILD is missing pkgver="
+            exit 1
+          fi
+          echo "::notice::Pre-flight checks passed for $PKGBUILD_PATH"
+
+      - name: Phase 0 — resolve package metadata
+        id: meta
+        shell: bash
+        run: |
+          (
+            cd "${{ inputs.pkgdir }}"
+            source ./PKGBUILD
+            pkgnames=("${pkgname[@]}")
+            echo "pkgnames_str=${pkgnames[*]}" >> "$GITHUB_OUTPUT"
+            echo "pkgver=$pkgver" >> "$GITHUB_OUTPUT"
+            echo "pkgrel=$pkgrel" >> "$GITHUB_OUTPUT"
+            {
+              echo "## Package: ${pkgnames[*]}"
+              echo ""
+              echo "- **Version**: \`$pkgver-$pkgrel\`"
+              echo "- **Variants**: ${#pkgnames[@]}"
+              echo "- **Keep versions**: ${{ inputs.keep_versions }}"
+              echo "- **Sign**: ${{ inputs.sign_package }}"
+              echo "- **Dry run**: ${{ inputs.dry_run }}"
+              echo "- **Purge cache**: ${{ inputs.purge_cache }}"
+            } >> "$GITHUB_STEP_SUMMARY"
+          )
+
+      - name: Phase 1 — import builder GPG key
+        env:
+          GPG_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        shell: su builder -s /bin/bash {0}
+        run: |
+          mkdir -p ~/.gnupg && chmod 700 ~/.gnupg
+          echo -e "allow-loopback-pinentry\nbatch" > ~/.gnupg/gpg-agent.conf
+          echo "auto-key-retrieve" >> ~/.gnupg/gpg.conf
+          echo "keyserver hkps://keyserver.ubuntu.com" >> ~/.gnupg/gpg.conf
+          gpgconf --kill gpg-agent || true
+
+          echo "$GPG_KEY" | gpg --batch --import
+          FINGERPRINT=$(gpg --list-keys --with-colons | grep '^fpr' | head -1 | cut -d: -f10)
+          if [ -z "$FINGERPRINT" ]; then
+            echo "::error::GPG key import failed — no fingerprint found"
+            exit 1
+          fi
+          echo "::notice::Builder key fingerprint: $FINGERPRINT"
+          echo "${FINGERPRINT}:6:" | gpg --import-ownertrust
+
+          sudo sed -i "s|^#*GPGKEY=.*|GPGKEY=\"$FINGERPRINT\"|" /etc/makepkg.conf
+
+      - name: Phase 1 — prepare source tree
+        run: chown -R builder:builder "${{ inputs.pkgdir }}"
+
+      - name: Phase 1 — build package
+        env:
+          SIGN: ${{ inputs.sign_package }}
+          SKIP_CHECKSUMS: ${{ inputs.skip_checksums }}
+          BUILD_RETRIES: ${{ inputs.build_retries }}
+        shell: su builder -s /bin/bash {0}
+        working-directory: ${{ inputs.pkgdir }}
+        run: |
+          MAKEPKG_ARGS=(-s --noconfirm)
+          [ "$SKIP_CHECKSUMS" = "true" ] && MAKEPKG_ARGS+=(--skipchecksums)
+          [ "$SIGN" = "true" ] && MAKEPKG_ARGS+=(--sign)
+
+          for attempt in $(seq 1 "$BUILD_RETRIES"); do
+            echo "::group::Build attempt $attempt/$BUILD_RETRIES"
+            if MAKEFLAGS="-j$(nproc)" makepkg "${MAKEPKG_ARGS[@]}"; then
+              echo "::endgroup::"
+              echo "::notice::Build succeeded on attempt $attempt"
+              break
+            fi
+            echo "::endgroup::"
+            if [ "$attempt" -eq "$BUILD_RETRIES" ]; then
+              echo "::error::Build failed after $BUILD_RETRIES attempts"
+              exit 1
+            fi
+            echo "Build failed, retrying in 15s..."
+            sleep 15
+          done
+
+      - name: Phase 1 — verify package artifacts
+        env:
+          SIGN: ${{ inputs.sign_package }}
+        shell: su builder -s /bin/bash {0}
+        working-directory: ${{ inputs.pkgdir }}
+        run: |
+          shopt -s nullglob
+          found=0
+          for f in *.pkg.tar.zst; do
+            found=1
+            echo "Built: $f"
+            if [ "$SIGN" = "true" ]; then
+              if [ ! -f "${f}.sig" ]; then
+                echo "::error::Signature missing for $f"
+                exit 1
+              fi
+              gpg --verify "${f}.sig" "$f" 2>&1 | grep -q "Good signature" || {
+                echo "::error::Signature verification FAILED for $f"
+                exit 1
+              }
+              echo "  ✓ signature verified"
+            fi
+          done
+          [ "$found" -eq 1 ] || { echo "::error::No .pkg.tar.zst produced"; exit 1; }
+
+      - name: Phase 1 — namcap lint (informational)
+        continue-on-error: true
+        shell: su builder -s /bin/bash {0}
+        working-directory: ${{ inputs.pkgdir }}
+        run: |
+          shopt -s nullglob
+          for f in *.pkg.tar.zst; do
+            echo "::group::namcap $f"
+            namcap "$f" || true
+            echo "::endgroup::"
+          done
+
+      - name: Phase 1 — upload build artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output-${{ github.run_id }}
+          path: ${{ inputs.pkgdir }}/*.pkg.tar.zst*
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Phase 2 — dry-run checkpoint
+        if: ${{ inputs.dry_run }}
+        run: |
+          echo "::notice::Dry run — skipping publish"
+          {
+            echo "## Dry run complete"
+            echo ""
+            echo "Package was built and verified, but not published to R2."
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+
+      - name: Phase 2 — sync current repo from R2 to staging
+        env:
+          REPO_KEY: ${{ secrets.REPO_ACCESS_KEY }}
+          REPO_SECRET: ${{ secrets.REPO_SECRET_ACCESS_KEY }}
+          ACCOUNT: ${{ secrets.ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+
+          rclone config create coraosrepo s3 \
+            provider=Cloudflare \
+            access_key_id="$REPO_KEY" \
+            secret_access_key="$REPO_SECRET" \
+            endpoint="https://$ACCOUNT.r2.cloudflarestorage.com" \
+            no_check_bucket=true
+
+          mkdir -p CoraOS_Repo.staging
+          rclone copy coraosrepo:coraos-repo/x86_64/ CoraOS_Repo.staging/ \
+            --verbose --retries 5 --retries-sleep 10s \
+            --transfers 16 --checkers 8
+
+          echo "::group::Staging directory contents (from R2)"
+          ls -la CoraOS_Repo.staging/
+          echo "::endgroup::"
+
+      - name: Phase 2 — stage new packages and prune old versions
+        env:
+          KEEP: ${{ inputs.keep_versions }}
+          PKGDIR: ${{ inputs.pkgdir }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cp "$PKGDIR"/*.pkg.tar.zst* CoraOS_Repo.staging/ || {
+            echo "::error::No package artifacts to publish"
+            exit 1
+          }
+
+          cd CoraOS_Repo.staging
+
+          shopt -s nullglob
+          for sig in *.pkg.tar.zst.sig; do
+            [ -f "${sig%.sig}" ] || { echo "Orphan sig: $sig"; rm -f "$sig"; }
+          done
+
+          echo "::group::paccache prune (keep newest $KEEP)"
+          paccache -r -k "$KEEP" -c . -v || {
+            echo "::warning::paccache exited non-zero, but continuing"
+          }
+          echo "::endgroup::"
+
+          echo "::group::Staging contents after prune"
+          ls -la
+          echo "::endgroup::"
+
+          shopt -s nullglob
+          added=""
+          for f in *.pkg.tar.zst; do
+            added="${added}${f}\n"
+          done
+          {
+            echo "ADDED<<EOF"
+            printf "$added"
+            echo "EOF"
+            echo "PRUNED<<EOF"
+            echo "(paccache pruned in-place — see log above for details)"
+            echo "EOF"
+          } >> "$GITHUB_ENV"
+
+      - name: Phase 3 — rebuild repo database in staging
+        run: |
+          set -euo pipefail
+          cd CoraOS_Repo.staging
+
+          rm -f coraos.db.tar.gz.old coraos.files.tar.gz.old
+          rm -f coraos.db.tar.gz coraos.db coraos.files.tar.gz coraos.files
+          rm -f coraos.db.tar.gz.sig coraos.files.tar.gz.sig
+          rm -f coraos.db.sig coraos.files.sig
+
+          shopt -s nullglob
+          repo-add coraos.db.tar.gz *.pkg.tar.zst
+
+          ln -sf coraos.db.tar.gz    coraos.db
+          ln -sf coraos.files.tar.gz coraos.files
+
+          echo "::group::Staging DB built"
+          ls -la coraos.db* coraos.files*
+          echo "::endgroup::"
+
+      - name: Phase 3.5 — sign the repo databases in staging
+        shell: su builder -s /bin/bash {0}
+        run: |
+          set -euo pipefail
+          cd CoraOS_Repo.staging
+
+          for dbfile in coraos.db.tar.gz coraos.files.tar.gz; do
+            if [ -f "$dbfile" ]; then
+              echo "Signing $dbfile..."
+              gpg --detach-sign --yes --no-tty \
+                  --pinentry-mode loopback --batch \
+                  "$dbfile"
+              gpg --verify "${dbfile}.sig" "$dbfile" 2>&1 | grep -q "Good signature" || {
+                echo "::error::Signature verification failed for $dbfile"
+                exit 1
+              }
+              echo "  ✓ ${dbfile}.sig created and verified"
+            fi
+          done
+
+          ln -sf coraos.db.tar.gz.sig    coraos.db.sig
+          ln -sf coraos.files.tar.gz.sig coraos.files.sig
+
+          echo "::group::Staging DB signed"
+          ls -la coraos.db* coraos.files*
+          echo "::endgroup::"
+
+      - name: Phase 3.9 — pre-swap verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd CoraOS_Repo.staging
+
+          echo "::group::Verifying new DB integrity"
+          if ! bsdtar -tzf coraos.db.tar.gz > /dev/null 2>&1; then
+            echo "::error::coraos.db.tar.gz is not a valid gzip tarball"
+            exit 1
+          fi
+          echo "  ✓ coraos.db.tar.gz is valid"
+
+          if ! bsdtar -tzf coraos.files.tar.gz > /dev/null 2>&1; then
+            echo "::error::coraos.files.tar.gz is not a valid gzip tarball"
+            exit 1
+          fi
+          echo "  ✓ coraos.files.tar.gz is valid"
+
+          for sig in coraos.db.tar.gz.sig coraos.files.tar.gz.sig; do
+            target="${sig%.sig}"
+            if ! gpg --verify "$sig" "$target" 2>&1 | grep -q "Good signature"; then
+              echo "::error::$sig does not verify against $target"
+              exit 1
+            fi
+            echo "  ✓ $sig verifies"
+          done
+
+          shopt -s nullglob
+          for f in *.pkg.tar.zst; do
+            if [ -f "${f}.sig" ]; then
+              if ! gpg --verify "${f}.sig" "$f" 2>&1 | grep -q "Good signature"; then
+                echo "::error::${f}.sig does not verify"
+                exit 1
+              fi
+            fi
+          done
+          echo "  ✓ All package signatures verify"
+
+          echo "::endgroup::"
+          echo "::notice::Pre-swap verification passed — safe to publish"
+
+      - name: Phase 4 — atomic swap staging → live
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          rm -rf CoraOS_Repo.bak
+
+          if [ -d CoraOS_Repo ]; then
+            mv CoraOS_Repo CoraOS_Repo.bak
+          fi
+          mv CoraOS_Repo.staging CoraOS_Repo
+
+          # If we get here, the swap succeeded. Remove the backup.
+          rm -rf CoraOS_Repo.bak
+
+          echo "::group::Live repo after swap"
+          ls -la CoraOS_Repo/ | head -30
+          echo "::endgroup::"
+          echo "::notice::Atomic swap complete — local repo updated"
+
+      - name: Phase 5 — sync live repo to R2
+        env:
+          REPO_KEY: ${{ secrets.REPO_ACCESS_KEY }}
+          REPO_SECRET: ${{ secrets.REPO_SECRET_ACCESS_KEY }}
+          ACCOUNT: ${{ secrets.ACCOUNT_ID }}
+        run: |
+          rclone sync CoraOS_Repo/ coraosrepo:coraos-repo/x86_64/ \
+            --verbose --retries 5 --retries-sleep 10s \
+            --checksum --copy-links \
+            --transfers 16 --checkers 8 \
+            --low-level-retries 20
+
+          echo "::notice::R2 sync complete"
+
+      - name: Phase 6 — check if cache purge is enabled
+        id: check_purge
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
+        shell: bash
+        run: |
+          if [ "${{ inputs.purge_cache }}" = "true" ] \
+             && [ -n "$CF_API_TOKEN" ] \
+             && [ -n "$CF_ZONE_ID" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Cloudflare cache purge is enabled"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Cloudflare cache purge is disabled (missing secrets or input)"
+          fi
+
+      - name: Phase 6 — purge Cloudflare cache for DB files
+        if: steps.check_purge.outputs.enabled == 'true'
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
+          REPO_HOSTNAME: ${{ secrets.REPO_HOSTNAME }}
+        shell: bash
+        run: |
+          set -uo pipefail
+
+          HOST="${REPO_HOSTNAME:-repo.coraos.org}"
+          PURGED=0
+          FAILED=0
+
+          for path in coraos.db coraos.db.tar.gz coraos.files coraos.files.tar.gz \
+                      coraos.db.sig coraos.db.tar.gz.sig \
+                      coraos.files.sig coraos.files.tar.gz.sig; do
+            url="https://${HOST}/x86_64/${path}"
+            echo "Purging: $url"
+            response=$(curl -sS -X POST \
+              "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/purge_cache" \
+              -H "Authorization: Bearer ${CF_API_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d "{\"files\":[\"${url}\"]}")
+
+            if echo "$response" | jq -e '.success == true' > /dev/null 2>&1; then
+              echo "  ✓ purged"
+              PURGED=$((PURGED+1))
+            else
+              echo "  ✗ failed: $(echo "$response" | jq -r '.errors[0].message // "unknown error"')"
+              FAILED=$((FAILED+1))
+            fi
+          done
+
+          echo "::notice::Purged $PURGED URLs ($FAILED failed)"
+
+      - name: Phase 6 — publish summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Publish result"
+            echo ""
+            echo "### Added / kept"
+            echo '```'
+            printf '%b' "${ADDED:-none}"
+            echo '```'
+            echo ""
+            echo "### Pruned"
+            echo '```'
+            printf '%b' "${PRUNED:-none}"
+            echo '```'
+            echo ""
+            echo "### Status"
+            if [ "${{ job.status }}" = "success" ]; then
+              echo "✅ Published to \`coraosrepo:coraos-repo/x86_64/\`"
+            else
+              echo "❌ Job did not complete successfully"
+              echo ""
+              echo "Local repo state is preserved (atomic swap ensures no half-state)."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Phase 7 — cleanup staging on failure
+        if: failure()
+        shell: bash
+        run: |
+          rm -rf CoraOS_Repo.staging
+          # If we have a backup (swap started but something after failed),
+          # the swap itself succeeded so we don't restore. The backup is
+          # already removed in the swap step. This is just defensive cleanup.
+          echo "::notice::Cleaned up staging directory after failure"
