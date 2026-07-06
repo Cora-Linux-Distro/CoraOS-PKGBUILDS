@@ -213,7 +213,10 @@ jobs:
               echo "  ✓ signature verified"
             fi
           done
-          [ "$found" -eq 1 ] || { echo "::error::No .pkg.tar.zst produced"; exit 1; }
+          if [ "$found" -ne 1 ]; then
+            echo "::error::No .pkg.tar.zst produced"
+            exit 1
+          fi
 
       - name: Phase 1 — namcap lint (informational)
         continue-on-error: true
@@ -288,18 +291,22 @@ jobs:
 
           shopt -s nullglob
           for sig in *.pkg.tar.zst.sig; do
-            [ -f "${sig%.sig}" ] || { echo "Orphan sig: $sig"; rm -f "$sig"; }
+            if [ ! -f "${sig%.sig}" ]; then
+              echo "Orphan sig: $sig"
+              rm -f "$sig"
+            fi
           done
 
           echo "::group::paccache prune (keep newest $KEEP)"
-          paccache -r -k "$KEEP" -c . -v
+          paccache -r -k "$KEEP" -c . -v || {
+            echo "::warning::paccache exited non-zero, but continuing"
+          }
           echo "::endgroup::"
 
           echo "::group::Staging contents after prune"
           ls -la
           echo "::endgroup::"
 
-          shopt -s nullglob
           added=""
           for f in *.pkg.tar.zst; do
             added="${added}${f}\n"
@@ -436,7 +443,7 @@ jobs:
           echo "::notice::R2 sync complete"
 
       - name: Phase 6 — purge Cloudflare cache for DB files
-        if: ${{ inputs.purge_cache && secrets.CF_API_TOKEN != '' && secrets.CF_ZONE_ID != '' }}
+        if: ${{ inputs.purge_cache }}
         env:
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           CF_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
@@ -444,6 +451,11 @@ jobs:
         shell: bash
         run: |
           set -uo pipefail
+
+          if [ -z "$CF_API_TOKEN" ] || [ -z "$CF_ZONE_ID" ]; then
+            echo "::notice::Skipping cache purge - CF_API_TOKEN or CF_ZONE_ID not provided"
+            exit 0
+          fi
 
           HOST="${REPO_HOSTNAME:-repo.coraos.org}"
           PURGED=0
@@ -471,7 +483,7 @@ jobs:
 
           echo "::notice::Purged $PURGED URLs ($FAILED failed)"
 
-      - name: Phase 6 — publish summary
+      - name: Phase 7 — publish summary
         if: always()
         shell: bash
         run: |
@@ -491,9 +503,6 @@ jobs:
             echo "### Status"
             if [ "${{ job.status }}" = "success" ]; then
               echo "✅ Published to \`coraosrepo:coraos-repo/x86_64/\`"
-              if [ "${{ inputs.purge_cache }}" = "true" ] && [ -n "${{ secrets.CF_API_TOKEN }}" ]; then
-                echo "✅ Cloudflare cache purged for DB files"
-              fi
             else
               echo "❌ Job did not complete successfully"
               echo ""
@@ -501,7 +510,7 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Phase 7 — cleanup staging on failure
+      - name: Phase 8 — cleanup staging on failure
         if: failure()
         shell: bash
         run: |
