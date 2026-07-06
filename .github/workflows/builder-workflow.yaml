@@ -340,6 +340,9 @@ jobs:
           ls -la coraos.db* coraos.files*
           echo "::endgroup::"
 
+      - name: Phase 3.5 — chown staging to builder
+        run: chown -R builder:builder CoraOS_Repo.staging
+
       - name: Phase 3.5 — sign the repo databases in staging
         shell: su builder -s /bin/bash {0}
         run: |
