@@ -9,7 +9,7 @@ on:
 
 jobs:
   build:
-    uses: Cora-Linux-Distro/ci-templates/.github/workflows/build-simple.yml@main
+    uses: Cora-Linux-Distro/CI-TEMPLATES/.github/workflows/build-simple.yml@main
     with:
       pkgdir: coraos-zsh-config
       keep_versions: 2
