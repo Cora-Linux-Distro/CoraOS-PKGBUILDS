@@ -40,12 +40,18 @@ jobs:
           echo "Current: $CURRENT"
 
           if [[ "$LATEST" == "$CURRENT" ]]; then
-            echo "update_needed=false" >> "$GITHUB_OUTPUT"
-            exit 0
+          echo "update_needed=false" >> "$GITHUB_OUTPUT"
+          exit 0
           fi
 
-          # Ensure the release is actually downloadable.
-          curl -fsI "https://update.code.visualstudio.com/${LATEST}/linux-x64/stable" >/dev/null
+          TARBALL_URL="https://update.code.visualstudio.com/${LATEST}/linux-x64/stable"
+          echo "Verifying tarball availability at $TARBALL_URL..."
+          HTTP_CODE=$(curl -sSL -o /dev/null -w "%{http_code}" -I "$TARBALL_URL")
+          if [[ "$HTTP_CODE" != "200" ]]; then
+          echo "::notice::Tarball not yet available (HTTP $HTTP_CODE). Skipping this run."
+          echo "update_needed=false" >> "$GITHUB_OUTPUT"
+          exit 0
+          fi
 
           echo "update_needed=true" >> "$GITHUB_OUTPUT"
           echo "new_version=$LATEST" >> "$GITHUB_OUTPUT"
