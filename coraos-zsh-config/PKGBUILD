@@ -1,7 +1,7 @@
 # Maintainer: CoraOS <support@coraos.org>
 pkgname=coraos-zsh-config
-pkgver=1.0.2
-pkgrel=2
+pkgver=1.0.3
+pkgrel=1
 pkgdesc="CoraOS default Zsh configuration (system-wide, managed)"
 arch=('any')
 url="https://github.com/CoraOS/CoraOS-PKGBUILDS"
@@ -17,7 +17,7 @@ depends=(
 backup=('etc/zsh/zshrc')
 source=(".zshrc"
         ".p10k.zsh")
-sha256sums=('c9af2dc53b99ec423ecad147a3c096efa1bbec55295aa28f82e5c9813d70e5e3'
+sha256sums=('1f613dbc8e0216c5ddd3852beedafc392e2c9a966430da2224bb569a8e9c956c'
             '9eb64ee8469657d7241304da31b3fdeddfdda3f63314fe868b97b1ce5151aca7')
 
 package() {
