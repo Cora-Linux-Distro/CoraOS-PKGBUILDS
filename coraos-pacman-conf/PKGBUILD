@@ -1,12 +1,29 @@
 # Maintainer: CoraOS <support@coraos.org>
-pkgname=coraos-pacman-conf
+pkgname=coraos-pacman-config
 pkgver=1.0.0
 pkgrel=1
-pkgdesc="CoraOS System Default Pacman Configuration."
+pkgdesc="CoraOS pacman configuration"
 arch=('any')
-license=('GPL-3.0-or-later')
-url="https://github.com/CoraOS/CoraOS-PKGBUILDS"
-depends=(
-    pacman
-    w
+url="https://coraos.org"
+license=('GPL-3.0-only')
+depends=('pacman' 'archlinux-keyring')
+backup=(
+    'etc/pacman.conf'
+    'etc/makepkg.conf'
+    'etc/pacman.d/coraos-mirrorlist'
 )
+
+source=(
+    'pacman.conf'
+    'makepkg.conf'
+    'coraos-mirrorlist'
+)
+sha256sums=('afe2f30c7ed1657d3b22de5ff2933034ad7af2b65f4e169c12fc609c3da8dca1'
+            '9da7d153fdda2e3902910c18d7b8fd431cd76f35594935c6763c29186aa3bc2b'
+            '5aa602a16bea65e2a94ab28de201904de5a6ab2cfa7906218767b82af522b96d')
+
+package() {
+    install -Dm644 "$srcdir/pacman.conf"        "$pkgdir/etc/pacman.conf"
+    install -Dm644 "$srcdir/makepkg.conf"       "$pkgdir/etc/makepkg.conf"
+    install -Dm444 "$srcdir/coraos-mirrorlist"  "$pkgdir/etc/pacman.d/coraos-mirrorlist"
+}
