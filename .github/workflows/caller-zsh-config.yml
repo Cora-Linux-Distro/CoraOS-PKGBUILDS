@@ -13,4 +13,7 @@ jobs:
     with:
       pkgdir: coraos-zsh-config
       keep_versions: 2
+      sign_package: true
+      skip_checksums: false
+      build_retries: 3
     secrets: inherit

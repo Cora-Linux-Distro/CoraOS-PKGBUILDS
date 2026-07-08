@@ -11,21 +11,22 @@
 # manually from the Actions tab.
 #
 # Secrets are inherited from the organization — no setup needed.
-name:
+name: Build CoraOS-Pacman-Config
 
 on:
   push:
     branches: [main]
     paths:
-      - "" # path of the PKGBUILD or some other file that gets updated often
+      - "coraos-pacman-conf/PKGBUILD" # path of the PKGBUILD or some other file that gets updated often
   workflow_dispatch:
 
 jobs:
   build:
     uses: Cora-Linux-Distro/CI-TEMPLATES/.github/workflows/build-simple.yml@main
     with:
-      pkgdir: # Directory of the repo
-      keep_versions: # amount of versions you wanna keep
+      pkgdir: coraos-pacman-conf # Directory of the directory containing the pkgbuild
+      keep_versions: 2 # amount of versions you wanna keep
+      sign_package: true
+      skip_checksums: false
+      build_retries: 3
     secrets: inherit
-
-
