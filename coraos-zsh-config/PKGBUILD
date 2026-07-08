@@ -24,7 +24,8 @@ source=(
     'fast-syntax-highlighting::git+https://github.com/zdharma-continuum/fast-syntax-highlighting.git'
 )
 sha256sums=('2125e7307a90ab28a3f126c92ba9d9e73cb1ed02d76666ab177ec1b7e92d1ee3'
-            '9eb64ee8469657d7241304da31b3fdeddfdda3f63314fe868b97b1ce5151aca7')
+            '9eb64ee8469657d7241304da31b3fdeddfdda3f63314fe868b97b1ce5151aca7'
+            'SKIP')
 
 package() {
     install -Dm644 "$srcdir/.zshrc" "$pkgdir/usr/share/coraos/zsh/coraos.zshrc"
