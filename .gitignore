@@ -1,7 +1,14 @@
+# git ignore template
+
 *.pkg.tar.zst
 *.pkg.tar.zst.sig
 *.tar.zst
+*.tar.gz
 pkg/
 src/
 
 *.log
+
+*.part
+
+stable
