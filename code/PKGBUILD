@@ -1,28 +1,34 @@
 # Maintainer: CoraOS <support@coraos.org>
-pkgname=vscode
+pkgname=code
 pkgver=1.127.0
 pkgrel=1
-pkgdesc="Visual Studio Code - Code editing redefined"
+pkgdesc="Microsoft Visual Studio Code editor"
 arch=('x86_64')
-url="https://code.visualstudio.com"
-license=('custom: Microsoft')
+url="https://code.visualstudio.com/"
+license=('custom: Microsoft Software License')
 depends=(
     'alsa-lib'
     'gtk3'
     'libsecret'
+    'gcc-libs'
     'libx11'
+    'lsof'
     'libxkbfile'
     'nss'
+    'libnotify'
+    'libxss'
+    'glibc'
+    'shared-mime-info'
+    'xdg-utils'
 )
 optdepends=(
-    'bash-completion: Tab completion'
-    'git: Git integration'
-    'glib2: Keyring support'
-    'libdbus: D-Bus support'
-    'org.freedesktop.secrets: Keychain support'
-    'xdg-utils: Open URLs in browser'
+    'git'
+    'glib2'
+    'libdbus'
+    'org.freedesktop.secrets'
+    'icu'
 )
-provides=('vscode')
+provides=('code' 'vscode')
 conflicts=('code-git' 'visual-studio-code-bin')
 options=('!strip')
 source=("code-stable-x64-${pkgver}.tar.gz::https://update.code.visualstudio.com/${pkgver}/linux-x64/stable")
