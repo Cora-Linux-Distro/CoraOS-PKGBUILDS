@@ -10,5 +10,5 @@ pkg/
 *.part
 stable
 code/
-caller-code.yml
-build-code.yml
+workflows/caller-code.yml
+workflows/build-code.yml
