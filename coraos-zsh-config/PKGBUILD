@@ -1,7 +1,7 @@
 # Maintainer: CoraOS <support@coraos.org>
 pkgname=coraos-zsh-config
 pkgver=1.0.6
-pkgrel=1
+pkgrel=2
 pkgdesc="CoraOS zsh configuration with Powerlevel10k"
 arch=('any')
 url="https://coraos.org"

@@ -1,0 +1,35 @@
+# CoraOS caller workflow template
+#
+# To use:
+# 1. Copy this file to .github/workflows/caller-<your-package>.yml
+# 2. Replace <name> with your package name
+# 3. Replace <pkgdir> with the directory containing your PKGBUILD
+# 4. Set keep_versions to how many old versions to retain (usually 2-3)
+#
+# The workflow will trigger automatically when you push changes to
+# <package-dir>/PKGBUILD or whatever you put as path on the main branch. You can also trigger it
+# manually from the Actions tab.
+#
+# Secrets are inherited from the organization — no setup needed.
+name: CoraOS Branding Build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "coraos-branding/PKGBUILD" # path of the PKGBUILD or some other file that gets updated often
+  workflow_dispatch:
+
+jobs:
+  build:
+    uses: Cora-Linux-Distro/CI-TEMPLATES/.github/workflows/build-simple.yml@main
+    with:
+      pkgdir: coraos-branding # Directory of the repo
+      keep_versions: 2 # amount of versions you wanna keep
+
+      # uncomment to sign packages with gpg key (recommended)
+      sign_package: true
+
+      skip_checksums: false
+      build_retries: 3
+    secrets: inherit

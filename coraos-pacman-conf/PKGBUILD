@@ -1,7 +1,7 @@
 # Maintainer: CoraOS <support@coraos.org>
 pkgname=coraos-pacman-config
 pkgver=1.0.0
-pkgrel=1
+pkgrel=2
 pkgdesc="CoraOS pacman configuration"
 arch=('any')
 url="https://coraos.org"
