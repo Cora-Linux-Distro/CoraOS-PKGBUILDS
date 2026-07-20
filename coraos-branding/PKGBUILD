@@ -29,9 +29,6 @@ package() {
     install -Dm644 "$srcdir/icon.svg" \
                    "$pkgdir/usr/share/icons/hicolor/scalable/apps/coraos-logo.svg"
 
-    install -Dm644 "$srcdir/coraos-logo.svg" \
-                   "$pkgdir/usr/share/pixmaps/coraos-logo.svg"
-
     install -Dm644 "$srcdir/Wallpaper.png" \
                    "$pkgdir/usr/share/backgrounds/coraos/coraos-default.png"
 
