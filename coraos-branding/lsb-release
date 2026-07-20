@@ -1,0 +1,7 @@
+# /etc/lsb-release
+# CoraOS Linux Standard Base release information
+
+DISTRIB_ID=CoraOS
+DISTRIB_RELEASE=1.0
+DISTRIB_CODENAME=Prodigy
+DISTRIB_DESCRIPTION="CoraOS 1.0 (Prodigy)"

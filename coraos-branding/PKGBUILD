@@ -1,0 +1,40 @@
+# Mantainer: FusionTech <fusiontechorganization@protonmail.com>
+
+pkgname=coraos-branding
+pkgver=1.0.1
+pkgrel=1
+pkgdesc="CoraOS branding (logos,wallpapers,etc)"
+arch=('any')
+url="https://coraos.org"
+license=('GPL-3.0-only')
+depends=('filesystem')
+
+source=(
+    'os-release'
+    'lsb-release'
+    'icon.svg'
+    'Wallpaper.png'
+    'wallpaper2.png'
+)
+sha256sums=('177190246e41591dd327529742232144c1d0a9c26e89489d00b356ba852c3e85'
+            '500266d9f25e1f4699a2ff31d40555772b9724ac868bdfc6995b29cb6cd96ade'
+            '928c5560f66b85abcced337957e2d75d408a80b4b1251ed31cd3a59523500ba1'
+            'bd45bdc957ed02b50a4067086a81730365b152253037069c187d3fa9927fa850'
+            '05016f5c17427b872bb4f6e75516aa13bf450273458161ee4ef01ce3c772b7cf')
+
+package() {
+    install -Dm644 "$srcdir/os-release"     "$pkgdir/etc/os-release"
+    install -Dm644 "$srcdir/lsb-release"    "$pkgdir/etc/lsb-release"
+
+    install -Dm644 "$srcdir/icon.svg" \
+                   "$pkgdir/usr/share/icons/hicolor/scalable/apps/coraos-logo.svg"
+
+    install -Dm644 "$srcdir/coraos-logo.svg" \
+                   "$pkgdir/usr/share/pixmaps/coraos-logo.svg"
+
+    install -Dm644 "$srcdir/Wallpaper.png" \
+                   "$pkgdir/usr/share/backgrounds/coraos/coraos-default.png"
+
+    install -Dm644 "$srcdir/wallpaper2.png" \
+                   "$pkgdir/usr/share/backgrounds/coraos/coraos-light.png"
+}

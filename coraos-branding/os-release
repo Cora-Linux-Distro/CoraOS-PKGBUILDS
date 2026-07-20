@@ -1,0 +1,24 @@
+# ================================================
+#           CoraOS os-release
+#       COPYRIGHT 2026 www.coraos.org
+#               Contact
+#           support@coraos.org
+# ================================================
+
+# Path = /etc/os-release
+
+
+NAME="CoraOS"
+PRETTY_NAME="CoraOS 1.0 (Prodigy)"
+VERSION="1.0 (Prodigy)"
+VERSION_ID="1.0"
+ID=coraos
+ID_LIKE=arch
+VERSION_CODENAME=Prodigy
+ANSI_COLOR="0;31"
+HOME_URL="https://coraos.org"
+SUPPORT_URL="https://coraos.org/support"
+BUG_REPORT_URL="https://github.com/Cora-Linux-Distro/coraos-issue-report"
+BUILD_ID="1.0.0"
+VARIANT="Default"
+LOGO=coraos-logo
