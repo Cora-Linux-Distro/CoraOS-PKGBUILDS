@@ -1,0 +1,24 @@
+# Maintainer: CoraOS Team <support@coraos.org>
+pkgname=coraos-detection
+pkgver=1.0.0
+pkgrel=1
+pkgdesc="CoraOS automated Detection for GPU,Kernel,CPU"
+arch=('x86_64')
+url="https://github.com/Cora-Linux-Distro/coraos-kernel-detection"
+license=('GPL-3.0-only')
+
+depends=('jq')
+
+source=(
+    "https://github.com/Cora-Linux-Distro/coraos-kernel-detection/releases/latest/download/coraos-kernel-detection"
+    "kernel-install.sh"
+)
+
+sha256sums=('7f54bc1e94ed9936025cd293f6b3f170d4f93050bd925595892d5b2294e244e2'
+            'd82ac58c98e41e90f8e81778848db1aaf6615efebec467ab79b77336dfd88996')
+
+package() {
+    install -Dm755 "$srcdir/coraos-kernel-detection" "$pkgdir/usr/bin/coraos-kernel-detection"
+
+    install -Dm755 "$srcdir/kernel-install.sh" "$pkgdir/usr/bin/cora-kernel-install.sh"
+}

@@ -12,3 +12,11 @@ stable
 code/
 workflows/caller-code.yml
 workflows/build-code.yml
+
+
+# kde config updpkgsums output (useless)
+kdeglobals
+kglobalshortcutsrc
+kwinrc
+plasma-org.kde.plasma.desktop-appletsrc
+plasmarc

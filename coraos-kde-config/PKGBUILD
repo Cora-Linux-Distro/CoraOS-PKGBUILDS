@@ -1,0 +1,73 @@
+# Maintainer: CoraOS Team <support@coraos.org>
+pkgname=coraos-kde-config
+pkgver=1.0.0
+pkgrel=1
+pkgdesc="Default KDE Plasma configuration, themes, and KWin scripts for CoraOS"
+arch=('any')
+url="https://github.com/Cora-linux/kde-config"
+license=('GPL3')
+depends=('plasma-desktop' 'kwin' 'coraos-branding')
+optdepends=(
+    'kzones'
+    'sticky-window-snapping'
+)
+
+source=(
+    "kdeglobals::https://raw.githubusercontent.com/Cora-linux/kde-config/main/kdeglobals"
+    "kglobalshortcutsrc::https://raw.githubusercontent.com/Cora-linux/kde-config/main/kglobalshortcutsrc"
+    "kwinrc::https://raw.githubusercontent.com/Cora-linux/kde-config/main/kwinrc"
+    "plasmarc::https://raw.githubusercontent.com/Cora-linux/kde-config/main/plasmarc"
+    "plasma-org.kde.plasma.desktop-appletsrc::https://raw.githubusercontent.com/Cora-linux/kde-config/main/plasma-org.kde.plasma.desktop-appletsrc"
+    "CoraOS-Dark.tar.gz::https://raw.githubusercontent.com/Cora-linux/kde-config/main/CoraOS-Dark.tar.gz"
+    "CoraOS-Light.tar.gz::https://raw.githubusercontent.com/Cora-linux/kde-config/main/CoraOS-Light.tar.gz"
+    "CoraOS-Splash.tar.gz::https://raw.githubusercontent.com/Cora-linux/kde-config/main/CoraOS-Splash.tar.gz"
+    "kzones-script.tar.gz::https://raw.githubusercontent.com/Cora-linux/kde-config/main/kzones-script.tar.gz"
+    "sticky-snapping-script.tar.gz::https://raw.githubusercontent.com/Cora-linux/kde-config/main/sticky-snapping-script.tar.gz"
+)
+
+sha256sums=('d00cc20a9a1a5dea52f930de7873f9a60298df8c8ab08ff105ec124cb7314095'
+            '3788515a0a246e5a0531becfbf9f9a232250ba074da4c49f746d68aa1e0f1ca5'
+            '5279b452809a2247fe20dc21def87df29a92b57b056677df8d025b196be5b48a'
+            '8394fc14b2f5e9db80262a33b552ad0a7a027967261d0ea2dadda35e8f871b91'
+            'e909233cced31c030b4ff07267a2bd44c0d5c970753a2bef019deeade271225e'
+            '722c546376360c0f973c4ef368f98edd4b489d2d0c8f1ab338aec5b396b1f357'
+            '6ea6c99030272bb4cd8569f01d0a8950a8f24252ce60f833515937a21a1aff2c'
+            'b25c19247be759c62bee1793d44653cec75888472c7e90190b26e0530741feb7'
+            '51e8881c09dc9afcd60d90e2dbfc3d02a32031fafa4caee961cd4112a208c5e0'
+            '8294d51f76941343ab766d612eb82f5c1b7941e46af6228f2a9a0a70ac1208cc')
+
+prepare() {
+    cd "$srcdir"
+
+    msg2 "Extracting theme and script archives"
+    tar -xzf CoraOS-Dark.tar.gz
+    tar -xzf CoraOS-Light.tar.gz
+    tar -xzf CoraOS-Splash.tar.gz
+    tar -xzf kzones-script.tar.gz
+    tar -xzf sticky-snapping-script.tar.gz
+
+    if [ -d "CoraOS-Splash" ]; then
+        mv CoraOS-Splash coraossimple
+    fi
+}
+
+backup=('etc/xdg/kdeglobals' 'etc/xdg/kglobalshortcutsrc' 'etc/xdg/kwinrc' 'etc/xdg/plasmarc' 'etc/xdg/plasma-org.kde.plasma.desktop-appletsrc')
+
+package() {
+    install -Dm644 "$srcdir/kdeglobals" "$pkgdir/etc/xdg/kdeglobals"
+    install -Dm644 "$srcdir/kglobalshortcutsrc" "$pkgdir/etc/xdg/kglobalshortcutsrc"
+    install -Dm644 "$srcdir/kwinrc" "$pkgdir/etc/xdg/kwinrc"
+    install -Dm644 "$srcdir/plasmarc" "$pkgdir/etc/xdg/plasmarc"
+    install -Dm644 "$srcdir/plasma-org.kde.plasma.desktop-appletsrc" "$pkgdir/etc/xdg/plasma-org.kde.plasma.desktop-appletsrc"
+
+    install -dm755 "$pkgdir/usr/share/plasma/look-and-feel"
+
+    cp -r "$srcdir/CoraOS-Dark" "$pkgdir/usr/share/plasma/look-and-feel/"
+    cp -r "$srcdir/CoraOS-Light" "$pkgdir/usr/share/plasma/look-and-feel/"
+    cp -r "$srcdir/coraossimple" "$pkgdir/usr/share/plasma/look-and-feel/"
+
+    install -dm755 "$pkgdir/usr/share/kwin/scripts"
+
+    cp -r "$srcdir/kzones" "$pkgdir/usr/share/kwin/scripts/"
+    cp -r "$srcdir/sticky-window-snapping" "$pkgdir/usr/share/kwin/scripts/"
+}
