@@ -1,8 +1,8 @@
 # Mantainer: FusionTech <fusiontechorganization@protonmail.com>
 
 pkgname=coraos-branding
-pkgver=1.0.1
-pkgrel=2
+pkgver=1.0.2
+pkgrel=1
 pkgdesc="CoraOS branding (logos,wallpapers,etc)"
 arch=('any')
 url="https://coraos.org"
