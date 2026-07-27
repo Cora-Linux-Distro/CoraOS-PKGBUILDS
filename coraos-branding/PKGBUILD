@@ -27,11 +27,11 @@ package() {
     install -Dm644 "$srcdir/lsb-release"    "$pkgdir/etc/lsb-release"
 
     install -Dm644 "$srcdir/icon.svg" \
-                   "$pkgdir/usr/share/icons/hicolor/scalable/apps/coraos-logo.svg"
+                   "$pkgdir/usr/share/icons/hicolor/scalable/apps/coraos.svg"
 
     install -Dm644 "$srcdir/Wallpaper.png" \
-                   "$pkgdir/usr/share/backgrounds/coraos/coraos-default.png"
+                   "$pkgdir/usr/share/wallpapers/coraos/coraos-default.png"
 
     install -Dm644 "$srcdir/wallpaper2.png" \
-                   "$pkgdir/usr/share/backgrounds/coraos/coraos-light.png"
+                   "$pkgdir/usr/share/wallpapers/coraos/coraos-light.png"
 }
