@@ -1,6 +1,6 @@
 # Maintainer: CoraOS <support@coraos.org>
 pkgname=coraos-pacman-config
-pkgver=2.0.0
+pkgver=1.0.4
 pkgrel=1
 pkgdesc="CoraOS pacman configuration"
 arch=('any')
@@ -19,7 +19,7 @@ source=(
     'coraos-mirrorlist'
 )
 sha256sums=('afe2f30c7ed1657d3b22de5ff2933034ad7af2b65f4e169c12fc609c3da8dca1'
-            '9da7d153fdda2e3902910c18d7b8fd431cd76f35594935c6763c29186aa3bc2b'
+            'fb61c8bc3bd53d2722676c1a519a4ad7c8689120309d36538498032ecd2234ca'
             '5aa602a16bea65e2a94ab28de201904de5a6ab2cfa7906218767b82af522b96d')
 
 package() {
