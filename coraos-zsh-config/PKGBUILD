@@ -2,13 +2,14 @@
 pkgname=coraos-zsh-config
 pkgver=1.0.6
 pkgrel=2
-pkgdesc="CoraOS zsh configuration with Powerlevel10k"
+pkgdesc="CoraOS zsh configuration"
 arch=('any')
 url="https://coraos.org"
 license=('GPL-3.0-only')
 depends=(
     'zsh'
     'zsh-autosuggestions'
+    'zsh-syntax-highlighting'
     'zsh-history-substring-search'
     'eza'
     'fzf'
@@ -16,23 +17,23 @@ depends=(
     'bat'
     'zoxide'
     'git'
-    'vim'
+    'nano'
 )
 source=(
+    'starship.toml'
     '.zshrc'
-    '.p10k.zsh'
-    'fast-syntax-highlighting::git+https://github.com/zdharma-continuum/fast-syntax-highlighting.git'
+    'zshrc'
 )
-sha256sums=('9de06e31bb5e514f738b5670527bb1bd788f17a401e0a0020b98b723056217dc'
-            '9eb64ee8469657d7241304da31b3fdeddfdda3f63314fe868b97b1ce5151aca7'
-            'SKIP')
+sha256sums=('bdcd14e339644633184d584646f3b2dd7c0ab13fd178ffa6d985b546bb9cf98c'
+            '4b3d85df1a858828f20465607c8bfcc9eeeb9ae05d3811c24da3bf3197af5f68'
+            'b8570ccedcbc76c0e814737ec3c1b965d2f9e676189f3dcb3c4feeb68dbc9795')
+
+backup=('etc/zsh/zshrc')
 
 package() {
     install -Dm644 "$srcdir/.zshrc" "$pkgdir/usr/share/coraos/zsh/coraos.zshrc"
-    install -Dm644 "$srcdir/.p10k.zsh" "$pkgdir/usr/share/coraos/zsh/.p10k.zsh"
-
-    install -d "$pkgdir/usr/share/coraos/zsh/plugins"
-    cp -r "$srcdir/fast-syntax-highlighting" "$pkgdir/usr/share/coraos/zsh/plugins/"
+    install -Dm644 "$srcdir/starship.toml" "$pkgdir/usr/share/coraos/zsh/starship.toml"
+    install -Dm644 "$srcdir/zshrc" "$pkgdir/etc/zsh/zshrc"
 }
 
 # vim: set ft=sh ts=2 sw=2 et:

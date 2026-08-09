@@ -1,6 +1,9 @@
-if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
-  source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
+export STARSHIP_CONFIG=/usr/share/coraos/zsh/starship.toml
+
+if command -v starship >/dev/null 2>&1; then
+  eval "$(starship init zsh)"
 fi
+
 
 HISTFILE="$HOME/.zsh_history"
 HISTSIZE=100000
@@ -31,44 +34,35 @@ export BROWSER=firefox
 export CLICOLOR=1
 export COLORTERM=truecolor
 export BAT_THEME="Catppuccin Mocha"
-
 export PATH="$HOME/.local/bin:$HOME/bin:$PATH"
 
-mkdir -p ~/.cache/zsh
-
+mkdir -p "$HOME/.cache/zsh"
 autoload -Uz compinit
 zmodload zsh/complist
-compinit -d ~/.cache/zcompdump
+compinit -d "$HOME/.cache/zsh/zcompdump"
 
 zstyle ':completion:*' matcher-list 'm:{a-z}={A-Za-z}'
 zstyle ':completion:*' menu select
 zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}"
 zstyle ':completion:*' group-name ''
 zstyle ':completion:*' use-cache on
-zstyle ':completion:*' cache-path ~/.cache/zsh
+zstyle ':completion:*' cache-path "$HOME/.cache/zsh"
+
+[[ -f /usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh ]] && \
+  source /usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh
+
+[[ -f /usr/share/zsh/plugins/zsh-history-substring-search/zsh-history-substring-search.zsh ]] && \
+  source /usr/share/zsh/plugins/zsh-history-substring-search/zsh-history-substring-search.zsh
+
+[[ -f /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ]] && \
+  source /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 
 bindkey -e
 bindkey '^[[A' history-substring-search-up
 bindkey '^[[B' history-substring-search-down
 
-[[ -r /usr/share/zsh-theme-powerlevel10k/powerlevel10k.zsh-theme ]] && source /usr/share/zsh-theme-powerlevel10k/powerlevel10k.zsh-theme
-if [[ -f ~/.p10k.zsh ]]; then
-	source ~/.p10k.zsh
-elif [[ -f /usr/share/coraos/zsh/.p10k.zsh ]]; then
-	source /usr/share/coraos/zsh/.p10k.zsh
-fi
-
-source /usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh
-source /usr/share/zsh/plugins/zsh-history-substring-search/zsh-history-substring-search.zsh
-source /usr/share/coraos/zsh/plugins/fast-syntax-highlighting/fast-syntax-highlighting.plugin.zsh
-
-bindkey '^[[A' history-substring-search-up
-bindkey '^[[B' history-substring-search-down
-
-
-
-eval "$(zoxide init zsh)"
-eval "$(fzf --zsh)"
+command -v zoxide >/dev/null 2>&1 && eval "$(zoxide init zsh)"
+command -v fzf >/dev/null 2>&1 && eval "$(fzf --zsh)"
 
 alias ls='eza --icons --group-directories-first'
 alias l='eza --icons'
@@ -94,7 +88,7 @@ alias ping='ping -c 5'
 alias update='sudo pacman -Syu'
 alias install='sudo pacman -S'
 alias remove='sudo pacman -Rns'
-alias autoremove='sudo pacman -Rns $(pacman -Qtdq)'
+alias autoremove='pacman -Qtdq | sudo pacman -Rns -'
 alias search='pacman -Ss'
 alias info='pacman -Si'
 alias files='pacman -Ql'
