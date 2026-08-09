@@ -21,7 +21,7 @@ depends=(
 )
 source=(
     'starship.toml'
-    '.zshrc'
+    'zshrcc'
     'zshrc'
 )
 sha256sums=('bdcd14e339644633184d584646f3b2dd7c0ab13fd178ffa6d985b546bb9cf98c'
