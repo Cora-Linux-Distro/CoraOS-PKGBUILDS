@@ -26,7 +26,7 @@ source=(
 )
 sha256sums=('bdcd14e339644633184d584646f3b2dd7c0ab13fd178ffa6d985b546bb9cf98c'
             '2354172a69f3a702151d56381c58ff2b5f7ca0fcc5f113567a199edc7999ea9b'
-            'e4e05b9018b0928315f7794b266af2b701f59bb0dc306caf4bee2456b6d0b168')
+            '6f53af4fc90d5b9e3af2a37d258fc9f54b50d6e783cddc3906da1a71d1bb3d07')
 
 backup=('etc/zsh/zshrc')
 
