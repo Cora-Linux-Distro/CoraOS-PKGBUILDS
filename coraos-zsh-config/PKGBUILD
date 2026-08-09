@@ -1,7 +1,7 @@
 # Maintainer: CoraOS <support@coraos.org>
 pkgname=coraos-zsh-config
-pkgver=1.0.6
-pkgrel=2
+pkgver=2.0.0
+pkgrel=1
 pkgdesc="CoraOS zsh configuration"
 arch=('any')
 url="https://coraos.org"
@@ -31,7 +31,7 @@ sha256sums=('bdcd14e339644633184d584646f3b2dd7c0ab13fd178ffa6d985b546bb9cf98c'
 backup=('etc/zsh/zshrc')
 
 package() {
-    install -Dm644 "$srcdir/.zshrc" "$pkgdir/usr/share/coraos/zsh/coraos.zshrc"
+    install -Dm644 "$srcdir/zshrcc" "$pkgdir/usr/share/coraos/zsh/coraos.zshrc"
     install -Dm644 "$srcdir/starship.toml" "$pkgdir/usr/share/coraos/zsh/starship.toml"
     install -Dm644 "$srcdir/zshrc" "$pkgdir/etc/zsh/zshrc"
 }
