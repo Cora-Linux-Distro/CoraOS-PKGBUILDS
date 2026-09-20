@@ -15,6 +15,7 @@ depends=(
     'fzf'
     'fd'
     'bat'
+    'starship'
     'zoxide'
     'git'
     'nano'
