@@ -31,7 +31,7 @@ sha256sums=('737d543928e6b8554379cd4724647dbdb05057144e3b0f69505e4690b90cc343'
             'e28d3f4c1991315f7980ede0d79ff34bdda29643a1879d244c06601a553f3bec')
 
 package() {
-    install -Dm644 "$srcdir/config.fish"
+    install -Dm644 "$srcdir/config.fish" \
         "$pkgdir/usr/share/coraos/fish/config.fish"
 
     install -Dm644 "$srcdir/prompt.fish" \
