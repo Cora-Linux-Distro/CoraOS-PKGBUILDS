@@ -25,7 +25,7 @@ jobs:
     uses: Cora-Linux-Distro/CI-TEMPLATES/.github/workflows/build-simple.yml@main
     with:
       pkgdir: fish-config
-      keep_versions: 1 amount of versions you wanna keep
+      keep_versions: 1
 
       # uncomment to sign packages with gpg key (recommended)
       sign_package: true
