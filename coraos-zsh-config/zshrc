@@ -1,3 +1,0 @@
-if [[ -f /usr/share/coraos/zsh/coraos.zshrc ]]; then
-  source /usr/share/coraos/zsh/coraos.zshrc
-fi
